@@ -88,6 +88,7 @@ function initGrid(size: number) {
 }
 
 export default function Home() {
+  const [isRunning, setIsRunning] = useState(false);
   const [grid, setGrid] = useState(initGrid(GRID_SIZE));
   const [turnCount, setTurnCount] = useState(0);
   const intervalRef = useRef<NodeJS.Timer>();
@@ -123,9 +124,14 @@ export default function Home() {
     setTurnCount((curr) => curr + 1);
   }
 
-  function startGame() {
-    const interval = setInterval(tick, 100);
-    intervalRef.current = interval;
+  const handleStop = () => {
+    setIsRunning(false);
+    clearInterval(intervalRef.current);
+  }
+
+  const handleStart = () => {
+    setIsRunning(true);
+    intervalRef.current = setInterval(tick, 100);
   }
 
   return (
@@ -133,7 +139,7 @@ export default function Home() {
       <h1>Conway&apos;s Game of Life</h1>
       <h1>{`Turns: ${turnCount}`}</h1>
       <Grid grid={grid} onCoordinateClick={setCellState} />
-      <button onClick={startGame}>Start</button>
+      <button onClick={isRunning ? handleStop : handleStart}>{isRunning ? 'Stop' : 'Start'}</button>
       <button onClick={clearGrid}>Clear</button>
     </div>
   );
