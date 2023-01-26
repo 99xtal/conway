@@ -15,6 +15,28 @@ a {
   box-sizing: border-box;
 }
 
+main {
+  position: relative;
+}
+
+.main {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  padding-top: 64px;
+  gap: 64px;
+  align-items: center;
+}
+
+.settings {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 25vw;
+  background-color: rgb(199, 199, 199);
+  margin: 32px;
+}
+
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;

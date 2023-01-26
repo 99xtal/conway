@@ -2,82 +2,12 @@ import Head from 'next/head';
 import Image from 'next/image';
 import styles from '../styles/Home.module.css';
 import { Grid } from '../components/Grid';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Coordinate } from '../types';
+import { createNextFrame } from '../utils/conway';
+import { GLIDER_GUN } from '../patterns';
 
-const GRID_SIZE = 25;
-
-function getNeighbors(c: Coordinate) {
-  const neighbors = [
-    {
-      x: c.x - 1,
-      y: c.y - 1,
-    },
-    {
-      x: c.x,
-      y: c.y - 1,
-    },
-    {
-      x: c.x + 1,
-      y: c.y - 1,
-    },
-    {
-      x: c.x - 1,
-      y: c.y,
-    },
-    {
-      x: c.x + 1,
-      y: c.y,
-    },
-    {
-      x: c.x - 1,
-      y: c.y + 1,
-    },
-    {
-      x: c.x,
-      y: c.y + 1,
-    },
-    {
-      x: c.x + 1,
-      y: c.y + 1,
-    },
-  ];
-
-  return neighbors;
-}
-
-function calculateNextFrame(grid: number[][]) {
-  const newGrid: number[][] = [];
-  for (let j = 0; j < grid.length; j++) {
-    const newRow: number[] = [];
-    for (let i = 0; i < grid[j].length; i++) {
-      const cell = grid[j][i];
-      const neighbors = getNeighbors({ x: i, y: j }).filter(
-        (n) => n.x >= 0 && n.x < grid.length && n.y >= 0 && n.y < grid.length
-      );
-      let aliveCount = 0;
-      for (const n of neighbors) {
-        const neighbor = grid[n.y][n.x];
-        if (neighbor === 1) {
-          aliveCount += 1;
-        }
-      }
-      if (cell === 1 && aliveCount < 2) {
-        newRow.push(0);
-      } else if (cell === 1 && aliveCount >= 2 && aliveCount <= 3) {
-        newRow.push(1);
-      } else if (cell === 1 && aliveCount > 3) {
-        newRow.push(0);
-      } else if (cell === 0 && aliveCount === 3) {
-        newRow.push(1);
-      } else {
-        newRow.push(cell);
-      }
-    }
-    newGrid.push(newRow);
-  }
-  return newGrid;
-}
+const GRID_SIZE = 50;
 
 function initGrid(size: number) {
   const grid = [];
@@ -89,7 +19,7 @@ function initGrid(size: number) {
 
 export default function Home() {
   const [isRunning, setIsRunning] = useState(false);
-  const [grid, setGrid] = useState(initGrid(GRID_SIZE));
+  const [grid, setGrid] = useState(GLIDER_GUN);
   const [turnCount, setTurnCount] = useState(0);
   const intervalRef = useRef<NodeJS.Timer>();
 
@@ -120,7 +50,7 @@ export default function Home() {
   }
 
   function tick() {
-    setGrid((curr) => calculateNextFrame(curr));
+    setGrid((curr) => createNextFrame(curr));
     setTurnCount((curr) => curr + 1);
   }
 
@@ -135,12 +65,24 @@ export default function Home() {
   }
 
   return (
-    <div>
-      <h1>Conway&apos;s Game of Life</h1>
-      <h1>{`Turns: ${turnCount}`}</h1>
-      <Grid grid={grid} onCoordinateClick={setCellState} />
-      <button onClick={isRunning ? handleStop : handleStart}>{isRunning ? 'Stop' : 'Start'}</button>
-      <button onClick={clearGrid}>Clear</button>
-    </div>
+    <main>
+      <div className="main">
+        <div>
+          <h1>Conway&apos;s Game of Life</h1>
+          <ol>
+            <li>Any live cell with fewer than two live neighbours dies, as if by underpopulation.</li>
+            <li>Any live cell with two or three live neighbours lives on to the next generation.</li>
+            <li>Any live cell with more than three live neighbours dies, as if by overpopulation.</li>
+            <li>Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.</li>
+          </ol>
+        </div>
+        <Grid grid={grid} onCoordinateClick={setCellState} />
+      </div>
+      <div className="settings">
+        <p>{`Turns: ${turnCount}`}</p>
+        <button onClick={isRunning ? handleStop : handleStart}>{isRunning ? 'Stop' : 'Start'}</button>
+        <button onClick={clearGrid}>Clear</button>
+      </div>
+    </main>
   );
 }
