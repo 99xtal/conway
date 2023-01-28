@@ -36,13 +36,3 @@ main {
   background-color: rgb(199, 199, 199);
   margin: 32px;
 }
-
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
-  body {
-    color: white;
-    background: black;
-  }
-}

@@ -4,10 +4,35 @@ import styles from '../styles/Home.module.css';
 import { Grid } from '../components/Grid';
 import { useEffect, useRef, useState } from 'react';
 import { Coordinate } from '../types';
-import { createNextFrame } from '../utils/conway';
+import { createNextFrame, createNextFrame2 } from '../utils/conway';
 import { GLIDER_GUN } from '../patterns';
 
-const GRID_SIZE = 50;
+import { createRoot } from 'react-dom/client'
+import { Canvas, MeshProps, useFrame } from '@react-three/fiber'
+
+function Box(props: MeshProps) {
+  // This reference will give us direct access to the mesh
+  const mesh = useRef(null!)
+  // Set up state for the hovered and active state
+  const [hovered, setHover] = useState(false)
+  const [active, setActive] = useState(false)
+  // Subscribe this component to the render-loop, rotate the mesh every frame
+  // @ts-ignore
+  useFrame((state, delta) => (mesh.current.rotation.x += delta))
+  // Return view, these are regular three.js elements expressed in JSX
+  return (
+    <mesh
+      {...props}
+      ref={mesh}
+      scale={active ? 1.5 : 1}
+      onClick={(event) => setActive(!active)}
+      onPointerOver={(event) => setHover(true)}
+      onPointerOut={(event) => setHover(false)}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial color={hovered ? 'hotpink' : 'orange'} />
+    </mesh>
+  )
+}
 
 function initGrid(size: number) {
   const grid = [];
@@ -19,38 +44,39 @@ function initGrid(size: number) {
 
 export default function Home() {
   const [isRunning, setIsRunning] = useState(false);
-  const [grid, setGrid] = useState(GLIDER_GUN);
+  const [activeCells, setActiveCells] = useState<{ [k: string]: number }>({ '2,1': 1, '3,2': 1, '3,3': 1, '2,3': 1, '1,3': 1 })
+  const height = 50;
+  const width = 50;
   const [turnCount, setTurnCount] = useState(0);
   const intervalRef = useRef<NodeJS.Timer>();
 
   function clearGrid() {
-    setGrid(initGrid(GRID_SIZE));
+    setActiveCells({});
     clearInterval(intervalRef.current);
     setTurnCount(0);
   }
 
   function setCellState({ x, y }: Coordinate) {
-    setGrid((currentGrid) =>
-      currentGrid.map((yRow, i) => {
-        if (i === y) {
-          return yRow.map((cell, j) => {
-            if (j === x) {
-              if (cell === 0) {
-                return 1;
-              } else {
-                return 0;
-              }
-            }
-            return cell;
-          });
+    setActiveCells((current) => {
+      const cellKey = `${x},${y}`;
+      console.log(cellKey)
+      if (current[cellKey] === 0 || !current[cellKey]) {
+        console.log('was empty')
+        return {
+          ...current,
+          cellKey: 1,
         }
-        return yRow;
-      })
-    );
+      } else {
+        return {
+          ...current,
+          cellKey: 0
+        }
+      }
+    })
   }
 
   function tick() {
-    setGrid((curr) => createNextFrame(curr));
+    setActiveCells((curr) => createNextFrame2(curr))
     setTurnCount((curr) => curr + 1);
   }
 
@@ -61,7 +87,7 @@ export default function Home() {
 
   const handleStart = () => {
     setIsRunning(true);
-    intervalRef.current = setInterval(tick, 100);
+    intervalRef.current = setInterval(tick, 50);
   }
 
   return (
@@ -76,7 +102,13 @@ export default function Home() {
             <li>Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.</li>
           </ol>
         </div>
-        <Grid grid={grid} onCoordinateClick={setCellState} />
+        <Canvas>
+          <ambientLight />
+          <pointLight position={[10, 10, 10]} />
+          <Box position={[-1.2, 0, 0]} />
+          <Box position={[1.2, 0, 0]} />
+        </Canvas>
+        {/* <Grid width={width} height={height} activeCells={activeCells} onCoordinateClick={setCellState} /> */}
       </div>
       <div className="settings">
         <p>{`Turns: ${turnCount}`}</p>

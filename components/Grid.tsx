@@ -4,7 +4,9 @@ import { Coordinate } from '../types';
 import { range } from '../utils/utils';
 
 interface GridProps {
-  grid: number[][];
+  width: number;
+  height: number;
+  activeCells: { [k: string]: number};
   onCoordinateClick: (c: Coordinate) => void;
 }
 
@@ -28,7 +30,7 @@ function Cell({ alive, onClick, mouseDown }: GridElementProps) {
   );
 }
 
-export function Grid({ grid, onCoordinateClick }: GridProps) {
+export function Grid({ width, height, activeCells, onCoordinateClick }: GridProps) {
   const [mouseDown, setMouseDown] = useState(false);
 
   useEffect(() => {
@@ -43,14 +45,14 @@ export function Grid({ grid, onCoordinateClick }: GridProps) {
 
   return (
     <div className={styles.container}>
-      {range(grid.length).map((y) => (
+      {range(height).map((y) => (
         <div className={styles.gridRow} key={y}>
-          {range(grid.length).map((x) => {
+          {range(width).map((x) => {
             const coord = { x, y };
             return (
               <Cell
                 mouseDown={mouseDown}
-                alive={grid[y][x]}
+                alive={activeCells[`${x},${y}`] === 1 ? 1 : 0}
                 onClick={() => onCoordinateClick(coord)}
                 key={`${x},${y}`}
               />
