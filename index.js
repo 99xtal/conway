@@ -19,6 +19,7 @@ function resetGameState() {
     if (timerId) {
         clearInterval(timerId);
         btn.innerHTML = "Start"
+        running = false;
     }
 }
 
