@@ -1,0 +1,57 @@
+body {
+    font-family:'Courier New', Courier, monospace;
+}
+
+main {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+h1 {
+    text-align: center;
+}
+
+canvas {
+    border: 2px solid black
+}
+
+.game-container {
+    position: relative;
+    display: inline-block;
+}
+
+.actions-container {
+    border: 2px solid grey;
+    position: absolute;
+    background-color: white;
+    bottom: 0;
+    right: 0;
+    padding: 0.5rem 1rem;
+    margin: 1rem 1rem; 
+
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.buttons-container {
+    display: flex;
+    justify-content: space-evenly;
+}
+
+.flex-centered {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center; 
+}
+
+.link-container {
+    padding-bottom: 0.5rem;
+}
+
+dialog {
+    max-width: 600px;
+}
