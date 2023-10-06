@@ -6,42 +6,129 @@ const CELL_COLOR = 'black';
 const CELL_SIZE = 15;
 const LINE_COLOR = 'gray';
 
-let turnsPerSecond = 15;
-let cellMap = {};
-let regenerationTimer = null;
 let isClicking = false;
 let lastToggledCell = null;
 let lastMouseCanvasOffset = null;
 
-function isRunning() {
-    return !!regenerationTimer;
-}
+class Game {
+    #turnsPerSecond = 15
+    #cellMap = {};
+    #gameTimer = null;
 
-function resetCellState() {
-    cellMap = {};
-}
-
-function startGameLoop() {
-    if (regenerationTimer) {
-        throw new Error("Regeneration timer already running");
+    constructor(options) {
+        if (options.turnsPerSecond) {
+            this.#turnsPerSecond = options.turnsPerSecond;
+        }
     }
 
-    regenerationTimer = setInterval(() => {
-        cellMap = createNextFrame(cellMap);
-    }, 1000 / turnsPerSecond);
-}
+    resetCellState() {
+        this.#cellMap = {};
+    }
 
-function stopGameLoop() {
-    clearInterval(regenerationTimer);
-    regenerationTimer = null;
-}
+    start() {
+        if (this.#gameTimer) {
+            throw new Error("Game timer already running");
+        }
 
-function toggleCellState(coordinates) {
-    const cellState = cellMap[key(coordinates)];
-    if (!cellState) {
-        cellMap[key(coordinates)] = true;
-    } else {
-        cellMap[key(coordinates)] = false;
+        this.#gameTimer = setInterval(() => {
+            this.#cellMap = this.#createNextFrame(this.#cellMap);
+        }, 1000 / this.#turnsPerSecond);
+    }
+
+    stop() {
+        clearInterval(this.#gameTimer);
+        this.#gameTimer = null;
+    }
+
+    isRunning() {
+        return !!this.#gameTimer;
+    }
+
+    setTPS(tps) {
+        this.#turnsPerSecond = tps;
+
+        if (this.isRunning()) {
+            this.stop();
+            this.start();
+        }
+    }
+
+    getCellMap() {
+        return this.#cellMap;
+    }
+
+    setCellState(coordinates, value) {
+        this.#cellMap[this.#key(coordinates)] = value;
+    }
+
+    toggleCellState(coordinates) {
+        const cellState = this.#cellMap[this.#key(coordinates)];
+        if (!cellState) {
+            this.#cellMap[this.#key(coordinates)] = true;
+        } else {
+            this.#cellMap[this.#key(coordinates)] = false;
+        }
+    }
+
+    #key(coordinate) {
+        return `${coordinate[0]},${coordinate[1]}`;
+    }
+
+    #getNeighbors(coordinates) {
+        const [x, y] = coordinates;
+        const neighbors = [];
+        for (let i = x - 1; i <= x + 1; i++) {
+            for (let j = y - 1; j <= y + 1; j++) {
+                if (i === x && j === y) {
+                    continue;
+                }
+                neighbors.push([i, j]);
+            }
+        }
+        return neighbors;
+    }
+
+    #createNextFrame(currentState) {
+        const nextState = { ...currentState };
+        const currentAliveCells = Object.entries(currentState).filter(([_, alive]) => alive).map(([k]) => coordinateFromKey(k));
+    
+        for (const cell of currentAliveCells) {
+            const neighbors = this.#getNeighbors(cell);
+            for (const neighbor of neighbors) {
+                if (!nextState[this.#key(neighbor)]) {
+                    nextState[this.#key(neighbor)] = false;
+                }
+            }
+        }
+    
+        for (const cell of Object.keys(nextState).map(coordinateFromKey)) {
+            const neighbors = this.#getNeighbors(cell);
+            let numAliveNeighbors = 0
+            for (const n of neighbors) {
+                if (currentState[this.#key(n)]) {
+                    numAliveNeighbors += 1;
+                }
+            }
+            
+            const cellKey = this.#key(cell);
+            if (currentState[cellKey] === true) {
+                if (numAliveNeighbors < 2) {
+                    nextState[cellKey] = false;
+                    continue;
+                } else if (numAliveNeighbors > 3) {
+                    nextState[cellKey] = false;
+                    continue;
+                } else {
+                    nextState[cellKey] = currentState[cellKey]
+                    continue;
+                }
+            } else if (!currentState[cellKey] && numAliveNeighbors === 3) {
+                nextState[cellKey] = true
+                continue;
+            }
+        }
+    
+        return nextState;
     }
 }
 
@@ -109,69 +196,8 @@ function drawState(ctx, cellMap) {
     }
 }
 
-function key(coordinate) {
-    return `${coordinate[0]},${coordinate[1]}`;
-}
-
 function coordinateFromKey(key) {
     return key.split(',').map((k) => parseInt(k, 10));
-}
-
-function getNeighbors(coordinates) {
-    const [x, y] = coordinates;
-    const neighbors = [];
-    for (let i = x - 1; i <= x + 1; i++) {
-        for (let j = y - 1; j <= y + 1; j++) {
-            if (i === x && j === y) {
-                continue;
-            }
-            neighbors.push([i, j]);
-        }
-    }
-    return neighbors;
-}
-
-function createNextFrame(currentState) {
-    const nextState = { ...currentState };
-    const currentAliveCells = Object.entries(currentState).filter(([_, alive]) => alive).map(([k]) => coordinateFromKey(k));
-
-    for (const cell of currentAliveCells) {
-        const neighbors = getNeighbors(cell);
-        for (const neighbor of neighbors) {
-            if (!nextState[key(neighbor)]) {
-                nextState[key(neighbor)] = false;
-            }
-        }
-    }
-
-    for (const cell of Object.keys(nextState).map(coordinateFromKey)) {
-        const neighbors = getNeighbors(cell);
-        let numAliveNeighbors = 0
-        for (const n of neighbors) {
-            if (currentState[key(n)]) {
-                numAliveNeighbors += 1;
-            }
-        }
-        
-        const cellKey = key(cell);
-        if (currentState[cellKey] === true) {
-            if (numAliveNeighbors < 2) {
-                nextState[cellKey] = false;
-                continue;
-            } else if (numAliveNeighbors > 3) {
-                nextState[cellKey] = false;
-                continue;
-            } else {
-                nextState[cellKey] = currentState[cellKey]
-                continue;
-            }
-        } else if (!currentState[cellKey] && numAliveNeighbors === 3) {
-            nextState[cellKey] = true
-            continue;
-        }
-    }
-
-    return nextState;
 }
 
 function onResize() {
@@ -191,14 +217,14 @@ function onResize() {
     }
 }
 
-function draw() {
+function draw(game) {
     const ctx = document.getElementById('game').getContext('2d');
     
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     drawGrid(ctx);
-    drawState(ctx, cellMap);
+    drawState(ctx, game.getCellMap());
     
-    window.requestAnimationFrame(draw);
+    window.requestAnimationFrame(() => draw(game));
 }
 
 function init() {
@@ -209,6 +235,10 @@ function init() {
     const rulesDialog = document.getElementById('rules-popup');
     const startStopBtn = document.getElementById('startstop');
     const resetBtn = document.getElementById('reset');
+
+    const game = new Game({
+        turnsPerSecond: 15
+    });
 
     window.addEventListener('resize', onResize);
     onResize();
@@ -229,9 +259,9 @@ function init() {
 
     canvas.addEventListener('mousedown', (e) => {
         isClicking = true;
-        if (!isRunning()) {
+        if (!game.isRunning()) {
             const coordinates = toCoordinate(e.offsetX, e.offsetY);
-            toggleCellState(coordinates);
+            game.toggleCellState(coordinates);
         }
     })
     
@@ -240,12 +270,12 @@ function init() {
     });
 
     canvas.addEventListener('mousemove', (e) => {
-        if (isClicking && !isRunning()) {
+        if (isClicking && !game.isRunning()) {
             const points = getLine(lastMouseCanvasOffset, [e.offsetX, e.offsetY], CELL_SIZE);
 
             const cellsToFill = points.map(([x, y]) => toCoordinate(x,y))
             for (const c of cellsToFill) {
-                cellMap[key(c)] = true;
+                game.setCellState(c, true);
             }
         }
 
@@ -253,7 +283,7 @@ function init() {
     })
 
     canvas.addEventListener('mouseover', (e) => {
-        if (isRunning()) {
+        if (game.isRunning()) {
             canvas.style.cursor = "move";
         } else {
             canvas.style.cursor = "pointer";
@@ -275,12 +305,12 @@ function init() {
         const tapX = e.touches[0].clientX - bcr.x
         const tapY = e.touches[0].clientY - bcr.y;
 
-        if (!isRunning()) {
+        if (!game.isRunning()) {
             const points = getLine(lastMouseCanvasOffset, [tapX, tapY], CELL_SIZE);
 
             const cellsToFill = points.map(([x, y]) => toCoordinate(x,y))
             for (const c of cellsToFill) {
-                cellMap[key(c)] = true;
+                game.setCellState(c, true);
             }
         }
 
@@ -288,38 +318,28 @@ function init() {
     })
 
     tpsInput.addEventListener('change', (e) => {
-        turnsPerSecond = e.target.value;
+        game.setTPS(e.target.value);
     })
 
-    tpsInput.addEventListener('blur', () => {
-        if (regenerationTimer) {
-            clearInterval(regenerationTimer);
-            regenerationTimer = setInterval(() => {
-                cellMap = createNextFrame(cellMap);
-            }, 1000 / turnsPerSecond);
-        }
-    });
-
     startStopBtn.addEventListener('click', () => {
-        if (isRunning()) {
-            stopGameLoop();
+        if (game.isRunning()) {
+            game.stop();
             startStopBtn.innerHTML = "Start";
         } else {
-            startGameLoop();
+            game.start();
             startStopBtn.innerHTML = "Stop";
         }
     })
 
     resetBtn.addEventListener('click', () => {
-        resetCellState();
-        if (regenerationTimer) {
-            clearInterval(regenerationTimer);
-            regenerationTimer = null;
+        game.resetCellState();
+        if (game.isRunning()) {
+            game.stop();
             startStopBtn.innerHTML = "Start"
         }
     })
 
-    window.requestAnimationFrame(draw);
+    window.requestAnimationFrame(() => draw(game));
 }
 
 init();
