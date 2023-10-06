@@ -8,34 +8,32 @@ const LINE_COLOR = 'gray';
 
 let turnsPerSecond = 15;
 let cellMap = {};
-let timerId = null;
-let running = false;
+let regenerationTimer = null;
 let isClicking = false;
 let lastToggledCell = null;
 let lastMouseCanvasOffset = null;
 
-function resetGameState() {
-    const btn = document.getElementById('startstop');
-    cellMap = {};
-    if (timerId) {
-        clearInterval(timerId);
-        btn.innerHTML = "Start"
-        running = false;
-    }
+function isRunning() {
+    return !!regenerationTimer;
 }
 
-function toggleStartStop() {
-    running = !running;
-    const btn = document.getElementById('startstop');
-    if (running) {
-        timerId = setInterval(() => {
-            cellMap = createNextFrame(cellMap);
-        }, 1000 / turnsPerSecond);
-        btn.innerHTML = "Stop"
-    } else if (timerId) {
-        clearInterval(timerId);
-        btn.innerHTML = "Start"
+function resetCellState() {
+    cellMap = {};
+}
+
+function startGameLoop() {
+    if (regenerationTimer) {
+        throw new Error("Regeneration timer already running");
     }
+
+    regenerationTimer = setInterval(() => {
+        cellMap = createNextFrame(cellMap);
+    }, 1000 / turnsPerSecond);
+}
+
+function stopGameLoop() {
+    clearInterval(regenerationTimer);
+    regenerationTimer = null;
 }
 
 function toggleCellState(coordinates) {
@@ -62,7 +60,7 @@ function drawGrid(ctx, options = {
     ctx.save();
 }
 
-function getCollinearPoints(c0, c1, step) {
+function getLine(c0, c1, step) {
     const dx = c1[0] - c0[0];
     const dy = c1[1] - c0[1];
     let m = dy / dx;
@@ -80,20 +78,13 @@ function getCollinearPoints(c0, c1, step) {
     return points;
 }
 
-function getTapCoordinate(e) {
-    const bcr = e.target.getBoundingClientRect();
-    const x = Math.floor((e.touches[0].clientX - bcr.x) / CELL_SIZE);
-    const y = Math.floor((e.touches[0].clientY - bcr.y) / CELL_SIZE);
-    return [x, y]; 
-}
-
-function getMouseCoordinate(x0, y0) {
+function toCoordinate(x0, y0) {
     const x = Math.floor(x0 / CELL_SIZE);
     const y = Math.floor(y0 / CELL_SIZE);
     return [x, y];
 }
 
-function fillCell(ctx, coordinate) {
+function drawCell(ctx, coordinate) {
     const canvasX = coordinate[0] * CELL_SIZE;
     const canvasY = coordinate[1] * CELL_SIZE;
     ctx.fillStyle = CELL_COLOR;
@@ -105,6 +96,17 @@ function clearCell(ctx, coordinate) {
     const canvasY = coordinate[1] * CELL_SIZE;
     ctx.clearRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
     ctx.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
+}
+
+function drawState(ctx, cellMap) {
+    for (const [key, alive] of Object.entries(cellMap)) {
+        const coordinate = coordinateFromKey(key);
+        if (alive) {
+            drawCell(ctx, coordinate);
+        } else {
+            clearCell(ctx, coordinate);
+        }
+    }
 }
 
 function key(coordinate) {
@@ -194,15 +196,7 @@ function draw() {
     
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     drawGrid(ctx);
-
-    for (const [key, alive] of Object.entries(cellMap)) {
-        const coordinate = coordinateFromKey(key);
-        if (alive) {
-            fillCell(ctx, coordinate);
-        } else {
-            clearCell(ctx, coordinate);
-        }
-    }
+    drawState(ctx, cellMap);
     
     window.requestAnimationFrame(draw);
 }
@@ -213,6 +207,8 @@ function init() {
     const canvas = document.getElementById('game');
     const tpsInput = document.getElementById('tps-input');
     const rulesDialog = document.getElementById('rules-popup');
+    const startStopBtn = document.getElementById('startstop');
+    const resetBtn = document.getElementById('reset');
 
     window.addEventListener('resize', onResize);
     onResize();
@@ -233,8 +229,8 @@ function init() {
 
     canvas.addEventListener('mousedown', (e) => {
         isClicking = true;
-        if (!running) {
-            const coordinates = getMouseCoordinate(e.offsetX, e.offsetY);
+        if (!isRunning()) {
+            const coordinates = toCoordinate(e.offsetX, e.offsetY);
             toggleCellState(coordinates);
         }
     })
@@ -244,10 +240,10 @@ function init() {
     });
 
     canvas.addEventListener('mousemove', (e) => {
-        if (isClicking && !running) {
-            const points = getCollinearPoints(lastMouseCanvasOffset, [e.offsetX, e.offsetY], CELL_SIZE);
+        if (isClicking && !isRunning()) {
+            const points = getLine(lastMouseCanvasOffset, [e.offsetX, e.offsetY], CELL_SIZE);
 
-            const cellsToFill = points.map(([x, y]) => getMouseCoordinate(x,y))
+            const cellsToFill = points.map(([x, y]) => toCoordinate(x,y))
             for (const c of cellsToFill) {
                 cellMap[key(c)] = true;
             }
@@ -257,7 +253,7 @@ function init() {
     })
 
     canvas.addEventListener('mouseover', (e) => {
-        if (running) {
+        if (isRunning()) {
             canvas.style.cursor = "move";
         } else {
             canvas.style.cursor = "pointer";
@@ -268,7 +264,7 @@ function init() {
         const bcr = e.target.getBoundingClientRect();
         const tapX = e.touches[0].clientX - bcr.x
         const tapY = e.touches[0].clientY - bcr.y;
-        
+
         lastMouseCanvasOffset = [tapX, tapY];
     })
 
@@ -279,10 +275,10 @@ function init() {
         const tapX = e.touches[0].clientX - bcr.x
         const tapY = e.touches[0].clientY - bcr.y;
 
-        if (!running) {
-            const points = getCollinearPoints(lastMouseCanvasOffset, [tapX, tapY], CELL_SIZE);
+        if (!isRunning()) {
+            const points = getLine(lastMouseCanvasOffset, [tapX, tapY], CELL_SIZE);
 
-            const cellsToFill = points.map(([x, y]) => getMouseCoordinate(x,y))
+            const cellsToFill = points.map(([x, y]) => toCoordinate(x,y))
             for (const c of cellsToFill) {
                 cellMap[key(c)] = true;
             }
@@ -296,11 +292,30 @@ function init() {
     })
 
     tpsInput.addEventListener('blur', () => {
-        if (timerId) {
-            clearInterval(timerId);
-            timerId = setInterval(() => {
+        if (regenerationTimer) {
+            clearInterval(regenerationTimer);
+            regenerationTimer = setInterval(() => {
                 cellMap = createNextFrame(cellMap);
             }, 1000 / turnsPerSecond);
+        }
+    });
+
+    startStopBtn.addEventListener('click', () => {
+        if (isRunning()) {
+            stopGameLoop();
+            startStopBtn.innerHTML = "Start";
+        } else {
+            startGameLoop();
+            startStopBtn.innerHTML = "Stop";
+        }
+    })
+
+    resetBtn.addEventListener('click', () => {
+        resetCellState();
+        if (regenerationTimer) {
+            clearInterval(regenerationTimer);
+            regenerationTimer = null;
+            startStopBtn.innerHTML = "Start"
         }
     })
 
