@@ -264,17 +264,31 @@ function init() {
         }
     });
 
+    canvas.addEventListener('touchstart', (e) => {
+        const bcr = e.target.getBoundingClientRect();
+        const tapX = e.touches[0].clientX - bcr.x
+        const tapY = e.touches[0].clientY - bcr.y;
+        
+        lastMouseCanvasOffset = [tapX, tapY];
+    })
+
     canvas.addEventListener('touchmove', (e) => {
         e.preventDefault();
-        if (running) {
-            return;
+
+        const bcr = e.target.getBoundingClientRect();
+        const tapX = e.touches[0].clientX - bcr.x
+        const tapY = e.touches[0].clientY - bcr.y;
+
+        if (!running) {
+            const points = getCollinearPoints(lastMouseCanvasOffset, [tapX, tapY], CELL_SIZE);
+
+            const cellsToFill = points.map(([x, y]) => getMouseCoordinate(x,y))
+            for (const c of cellsToFill) {
+                cellMap[key(c)] = true;
+            }
         }
 
-        const coordinates = getTapCoordinate(e);
-        if (!lastToggledCell || key(coordinates) !== lastToggledCell) {
-            cellMap[key(coordinates)] = true;
-            lastToggledCell = key(coordinates);
-        }
+        lastMouseCanvasOffset = [tapX, tapY];
     })
 
     tpsInput.addEventListener('change', (e) => {
