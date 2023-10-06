@@ -12,6 +12,7 @@ let timerId = null;
 let running = false;
 let isClicking = false;
 let lastToggledCell = null;
+let lastMouseCanvasOffset = null;
 
 function resetGameState() {
     const btn = document.getElementById('startstop');
@@ -61,6 +62,24 @@ function drawGrid(ctx, options = {
     ctx.save();
 }
 
+function getCollinearPoints(c0, c1, step) {
+    const dx = c1[0] - c0[0];
+    const dy = c1[1] - c0[1];
+    let m = dy / dx;
+    if (isNaN(m)) {
+        m = 0;
+    }
+    const b = c1[1] - (m * c1[0]);
+    const points = [];
+    const xDir = dx / Math.abs(dx);
+
+    for (let x = c0[0]; xDir > 0 ? x <= c1[0] : x >= c1[0]; x += xDir * step) {
+        const y = m*x + b;
+        points.push([x, y]);
+    }
+    return points;
+}
+
 function getTapCoordinate(e) {
     const bcr = e.target.getBoundingClientRect();
     const x = Math.floor((e.touches[0].clientX - bcr.x) / CELL_SIZE);
@@ -68,9 +87,9 @@ function getTapCoordinate(e) {
     return [x, y]; 
 }
 
-function getMouseCoordinate(e) {
-    const x = Math.floor(e.offsetX / CELL_SIZE);
-    const y = Math.floor(e.offsetY / CELL_SIZE);
+function getMouseCoordinate(x0, y0) {
+    const x = Math.floor(x0 / CELL_SIZE);
+    const y = Math.floor(y0 / CELL_SIZE);
     return [x, y];
 }
 
@@ -214,26 +233,27 @@ function init() {
 
     canvas.addEventListener('mousedown', (e) => {
         isClicking = true;
+        if (!running) {
+            const coordinates = getMouseCoordinate(e.offsetX, e.offsetY);
+            toggleCellState(coordinates);
+        }
     })
     
     canvas.addEventListener('mouseup', (e) => {
-        if (!running) {
-            const coordinates = getMouseCoordinate(e);
-            toggleCellState(coordinates);
-        }
         isClicking = false;
     });
 
     canvas.addEventListener('mousemove', (e) => {
         if (isClicking && !running) {
-            const coordinates = getMouseCoordinate(e);
+            const points = getCollinearPoints(lastMouseCanvasOffset, [e.offsetX, e.offsetY], CELL_SIZE);
 
-            if (!lastToggledCell || key(coordinates) !== lastToggledCell) {
-                cellMap[key(coordinates)] = true;
-                lastToggledCell = key(coordinates);
+            const cellsToFill = points.map(([x, y]) => getMouseCoordinate(x,y))
+            for (const c of cellsToFill) {
+                cellMap[key(c)] = true;
             }
         }
 
+        lastMouseCanvasOffset = [e.offsetX, e.offsetY]
     })
 
     canvas.addEventListener('mouseover', (e) => {
