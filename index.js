@@ -19,6 +19,20 @@ class Coordinate {
     toString() {
         return `${this.x},${this.y}`
     }
+
+    getNeighbors() {
+        const { x, y } = this;
+        const neighbors = [];
+        for (let i = x - 1; i <= x + 1; i++) {
+            for (let j = y - 1; j <= y + 1; j++) {
+                if (i === x && j === y) {
+                    continue;
+                }
+                neighbors.push(new Coordinate(i, j));
+            }
+        }
+        return neighbors; 
+    }
 }
 
 class CoordinateMap {
@@ -44,19 +58,42 @@ class CoordinateMap {
     }
 }
 
-class Game {
+class EventEmitter{
+    constructor(){
+        this.callbacks = {}
+    }
+
+    on(event, cb){
+        if(!this.callbacks[event]) this.callbacks[event] = [];
+        this.callbacks[event].push(cb)
+    }
+
+    emit(event, data){
+        let cbs = this.callbacks[event]
+        if(cbs){
+            cbs.forEach(cb => cb(data))
+        }
+    }
+}
+
+class Game extends EventEmitter {
     #turnsPerSecond = 15
     #cellMap = new CoordinateMap();
     #gameTimer = null;
 
     constructor(options) {
+        super();
         if (options.turnsPerSecond) {
             this.#turnsPerSecond = options.turnsPerSecond;
         }
     }
 
-    resetCellState() {
+    reset() {
         this.#cellMap = new CoordinateMap();
+        if (this.isRunning()) {
+            this.stop();
+            this.emit('stop');
+        }
     }
 
     start() {
@@ -67,11 +104,13 @@ class Game {
         this.#gameTimer = setInterval(() => {
             this.#cellMap = this.#createNextFrame(this.#cellMap);
         }, 1000 / this.#turnsPerSecond);
+        this.emit('start');
     }
 
     stop() {
         clearInterval(this.#gameTimer);
         this.#gameTimer = null;
+        this.emit('stop');
     }
 
     isRunning() {
@@ -104,20 +143,6 @@ class Game {
         }
     }
 
-    #getNeighbors(coordinates) {
-        const { x, y } = coordinates
-        const neighbors = [];
-        for (let i = x - 1; i <= x + 1; i++) {
-            for (let j = y - 1; j <= y + 1; j++) {
-                if (i === x && j === y) {
-                    continue;
-                }
-                neighbors.push(new Coordinate(i, j));
-            }
-        }
-        return neighbors;
-    }
-
     #createNextFrame(currentState) {
         const nextState = new CoordinateMap(currentState);
         const currentAliveCells = [];
@@ -128,7 +153,7 @@ class Game {
         })
     
         for (const cell of currentAliveCells) {
-            const neighbors = this.#getNeighbors(cell);
+            const neighbors = cell.getNeighbors();
             for (const neighbor of neighbors) {
                 if (!nextState.get(neighbor)) {
                     nextState.set(neighbor, false);
@@ -137,7 +162,7 @@ class Game {
         }
 
         nextState.forEach((_, cell) => {
-            const neighbors = this.#getNeighbors(cell);
+            const neighbors = cell.getNeighbors();
             let numAliveNeighbors = 0
             for (const n of neighbors) {
                 if (currentState.get(n)) {
@@ -270,6 +295,14 @@ function init() {
         turnsPerSecond: 15
     });
 
+    game.on('start', () => {
+        startStopBtn.innerHTML = "Stop";
+    })
+
+    game.on('stop', () => {
+        startStopBtn.innerHTML = "Start"; 
+    })
+
     window.addEventListener('resize', onResize);
     onResize();
 
@@ -354,19 +387,13 @@ function init() {
     startStopBtn.addEventListener('click', () => {
         if (game.isRunning()) {
             game.stop();
-            startStopBtn.innerHTML = "Start";
-        } else {
-            game.start();
-            startStopBtn.innerHTML = "Stop";
+         } else {
+            game.start()
         }
     })
 
     resetBtn.addEventListener('click', () => {
-        game.resetCellState();
-        if (game.isRunning()) {
-            game.stop();
-            startStopBtn.innerHTML = "Start"
-        }
+        game.reset();
     })
 
     window.requestAnimationFrame(() => draw(game));
