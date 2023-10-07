@@ -134,6 +134,7 @@ class PixelGrid {
         this.cellSize = options?.cellSize ?? 15;
         this.lineColor = options?.lineColor ?? 'gray';
         this.fillColor = options?.fillColor ?? 'black';
+
         this.#stateMap = new CoordinateMap();
         this.editEnabled = true;
         this.#lastMouseCanvasOffset = null;
@@ -202,9 +203,9 @@ class PixelGrid {
 
         this.canvas.addEventListener('mouseover', (e) => {
             if (this.editEnabled) {
-                canvas.style.cursor = "move";
-            } else {
                 canvas.style.cursor = "pointer";
+            } else {
+                canvas.style.cursor = "move";
             }
         });
     }
@@ -318,6 +319,7 @@ function init() {
     });
 
     window.addEventListener('resize', onResize);
+    onResize();
 
     rulesBtn.addEventListener('click', () => {
         rulesDialog.showModal();
