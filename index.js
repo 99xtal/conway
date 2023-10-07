@@ -180,6 +180,8 @@ class PixelGrid {
             const tapY = e.touches[0].clientY - bcr.y;
     
             this.#lastMouseCanvasOffset = [tapX, tapY];
+        }, {
+            passive: true
         })
     
         this.canvas.addEventListener('touchmove', (e) => {
@@ -199,6 +201,8 @@ class PixelGrid {
             }
     
             this.#lastMouseCanvasOffset = [tapX, tapY];
+        }, {
+            passive: true
         });
 
         this.canvas.addEventListener('mouseover', (e) => {
