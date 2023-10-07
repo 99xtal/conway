@@ -10,9 +10,43 @@ let isClicking = false;
 let lastToggledCell = null;
 let lastMouseCanvasOffset = null;
 
+class Coordinate {
+    constructor(x, y) {
+        this.x = parseInt(x, 10);
+        this.y = parseInt(y, 10);;
+    }
+
+    toString() {
+        return `${this.x},${this.y}`
+    }
+}
+
+class CoordinateMap {
+    map = new Map();
+
+    constructor(initial) {
+        if (initial?.map) {
+            // Deep clone Map
+            initial.map.forEach((value, key) => this.map.set(key, value));
+        };
+    }
+
+    set(c, value) {
+        this.map.set(c.toString(), value)
+    }
+
+    get(c) {
+        return this.map.get(c.toString());
+    }
+
+    forEach(callback) {
+        return this.map.forEach((v, k, m) => callback(v, coordinateFromKey(k), m));
+    }
+}
+
 class Game {
     #turnsPerSecond = 15
-    #cellMap = {};
+    #cellMap = new CoordinateMap();
     #gameTimer = null;
 
     constructor(options) {
@@ -22,7 +56,7 @@ class Game {
     }
 
     resetCellState() {
-        this.#cellMap = {};
+        this.#cellMap = new CoordinateMap();
     }
 
     start() {
@@ -58,75 +92,71 @@ class Game {
     }
 
     setCellState(coordinates, value) {
-        this.#cellMap[this.#key(coordinates)] = value;
+        this.#cellMap.set(coordinates, value);
     }
 
     toggleCellState(coordinates) {
-        const cellState = this.#cellMap[this.#key(coordinates)];
+        const cellState = this.#cellMap.get(coordinates);
         if (!cellState) {
-            this.#cellMap[this.#key(coordinates)] = true;
+            this.#cellMap.set(coordinates, true);
         } else {
-            this.#cellMap[this.#key(coordinates)] = false;
+            this.#cellMap.set(coordinates, false)
         }
     }
 
-    #key(coordinate) {
-        return `${coordinate[0]},${coordinate[1]}`;
-    }
-
     #getNeighbors(coordinates) {
-        const [x, y] = coordinates;
+        const { x, y } = coordinates
         const neighbors = [];
         for (let i = x - 1; i <= x + 1; i++) {
             for (let j = y - 1; j <= y + 1; j++) {
                 if (i === x && j === y) {
                     continue;
                 }
-                neighbors.push([i, j]);
+                neighbors.push(new Coordinate(i, j));
             }
         }
         return neighbors;
     }
 
     #createNextFrame(currentState) {
-        const nextState = { ...currentState };
-        const currentAliveCells = Object.entries(currentState).filter(([_, alive]) => alive).map(([k]) => coordinateFromKey(k));
+        const nextState = new CoordinateMap(currentState);
+        const currentAliveCells = [];
+        currentState.forEach((alive, cell) => {
+            if (alive === true) {
+                currentAliveCells.push(cell);
+            }
+        })
     
         for (const cell of currentAliveCells) {
             const neighbors = this.#getNeighbors(cell);
             for (const neighbor of neighbors) {
-                if (!nextState[this.#key(neighbor)]) {
-                    nextState[this.#key(neighbor)] = false;
+                if (!nextState.get(neighbor)) {
+                    nextState.set(neighbor, false);
                 }
             }
         }
-    
-        for (const cell of Object.keys(nextState).map(coordinateFromKey)) {
+
+        nextState.forEach((_, cell) => {
             const neighbors = this.#getNeighbors(cell);
             let numAliveNeighbors = 0
             for (const n of neighbors) {
-                if (currentState[this.#key(n)]) {
+                if (currentState.get(n)) {
                     numAliveNeighbors += 1;
                 }
             }
             
-            const cellKey = this.#key(cell);
-            if (currentState[cellKey] === true) {
+            if (currentState.get(cell) === true) {
                 if (numAliveNeighbors < 2) {
-                    nextState[cellKey] = false;
-                    continue;
+                    nextState.set(cell, false);
                 } else if (numAliveNeighbors > 3) {
-                    nextState[cellKey] = false;
-                    continue;
+                    nextState.set(cell, false);
                 } else {
-                    nextState[cellKey] = currentState[cellKey]
-                    continue;
+                    nextState.set(cell, currentState.get(cell));
                 }
-            } else if (!currentState[cellKey] && numAliveNeighbors === 3) {
-                nextState[cellKey] = true
-                continue;
+            } else if (!currentState.get(cell) && numAliveNeighbors === 3) {
+                nextState.set(cell, true);
             }
-        }
+        });
     
         return nextState;
     }
@@ -168,12 +198,12 @@ function getLine(c0, c1, step) {
 function toCoordinate(x0, y0) {
     const x = Math.floor(x0 / CELL_SIZE);
     const y = Math.floor(y0 / CELL_SIZE);
-    return [x, y];
+    return new Coordinate(x, y);
 }
 
 function drawCell(ctx, coordinate) {
-    const canvasX = coordinate[0] * CELL_SIZE;
-    const canvasY = coordinate[1] * CELL_SIZE;
+    const canvasX = coordinate.x * CELL_SIZE;
+    const canvasY = coordinate.y * CELL_SIZE;
     ctx.fillStyle = CELL_COLOR;
     ctx.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
 }
@@ -186,18 +216,18 @@ function clearCell(ctx, coordinate) {
 }
 
 function drawState(ctx, cellMap) {
-    for (const [key, alive] of Object.entries(cellMap)) {
-        const coordinate = coordinateFromKey(key);
+    cellMap.forEach((alive, cell) => {
         if (alive) {
-            drawCell(ctx, coordinate);
+            drawCell(ctx, cell);
         } else {
-            clearCell(ctx, coordinate);
-        }
-    }
+            clearCell(ctx, cell);
+        } 
+    });
 }
 
 function coordinateFromKey(key) {
-    return key.split(',').map((k) => parseInt(k, 10));
+    const [x, y] = key.split(',');
+    return new Coordinate(x, y);
 }
 
 function onResize() {
@@ -273,7 +303,7 @@ function init() {
         if (isClicking && !game.isRunning()) {
             const points = getLine(lastMouseCanvasOffset, [e.offsetX, e.offsetY], CELL_SIZE);
 
-            const cellsToFill = points.map(([x, y]) => toCoordinate(x,y))
+            const cellsToFill = points.map(([x, y]) => toCoordinate(x,y)).filter((c) => !isNaN(c.x) &&  !isNaN(c.y));
             for (const c of cellsToFill) {
                 game.setCellState(c, true);
             }
