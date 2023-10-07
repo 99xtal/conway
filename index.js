@@ -179,7 +179,7 @@ class PixelGrid {
             const tapX = e.touches[0].clientX - bcr.x
             const tapY = e.touches[0].clientY - bcr.y;
     
-            lastMouseCanvasOffset = [tapX, tapY];
+            this.#lastMouseCanvasOffset = [tapX, tapY];
         })
     
         this.canvas.addEventListener('touchmove', (e) => {
@@ -190,7 +190,7 @@ class PixelGrid {
             const tapY = e.touches[0].clientY - bcr.y;
     
             if (this.editEnabled) {
-                const points = getLine(lastMouseCanvasOffset, [tapX, tapY], this.cellSize);
+                const points = getLine(this.#lastMouseCanvasOffset, [tapX, tapY], this.cellSize);
     
                 const cellsToFill = points.map(([x, y]) => this.#toCoordinate(x,y))
                 for (const c of cellsToFill) {
@@ -198,7 +198,7 @@ class PixelGrid {
                 }
             }
     
-            lastMouseCanvasOffset = [tapX, tapY];
+            this.#lastMouseCanvasOffset = [tapX, tapY];
         });
 
         this.canvas.addEventListener('mouseover', (e) => {
@@ -287,20 +287,20 @@ function getLine(c0, c1, step) {
     return points;
 }
 
-function onResize() {
+function onResize(maxWidth, maxHeight, grid) {
     const canvas = document.getElementById('game');
     const header = document.querySelector('header')
 
-    if (window.innerWidth < GRID_MAX_WIDTH) {
+    if (window.innerWidth < maxWidth) {
         canvas.width = window.innerWidth - 32;
     } else {
-        canvas.width = GRID_MAX_WIDTH
+        canvas.width = maxWidth
     }
 
-    if (window.innerHeight < GRID_MAX_HEIGHT + header.offsetHeight + 64) {
+    if (window.innerHeight < maxHeight + header.offsetHeight + 64) {
         canvas.height = window.innerHeight - header.offsetHeight - 64;
     } else {
-        canvas.height = GRID_MAX_HEIGHT;
+        canvas.height = maxHeight;
     }
 }
 
@@ -313,13 +313,18 @@ function init() {
     const startStopBtn = document.getElementById('startstop');
     const resetBtn = document.getElementById('reset');
 
+    const CANVAS_HEIGHT = 555;
+    const CANVAS_WIDTH = 600;
+
     const grid = new PixelGrid(canvas, {
-        width: 600,
-        height: 555,
+        width: CANVAS_WIDTH,
+        height: CANVAS_HEIGHT,
     });
 
-    window.addEventListener('resize', onResize);
-    onResize();
+    window.addEventListener('resize', () => onResize(CANVAS_WIDTH, CANVAS_HEIGHT));
+    onResize(CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    grid.reset();
 
     rulesBtn.addEventListener('click', () => {
         rulesDialog.showModal();
