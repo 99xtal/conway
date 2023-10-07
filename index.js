@@ -1,14 +1,8 @@
 'use strict';
 
-const GRID_MAX_WIDTH = 600;
-const GRID_MAX_HEIGHT = 555;
-const CELL_COLOR = 'black';
-const CELL_SIZE = 15;
-const LINE_COLOR = 'gray';
-
 let isClicking = false;
-let lastToggledCell = null;
-let lastMouseCanvasOffset = null;
+let timerId = null;
+let framesPerSecond = 15;
 
 class Coordinate {
     constructor(x, y) {
@@ -54,74 +48,38 @@ class CoordinateMap {
     }
 
     forEach(callback) {
-        return this.map.forEach((v, k, m) => callback(v, coordinateFromKey(k), m));
+        return this.map.forEach((v, k, m) => callback(v, this.#coordinateFromKey(k), m));
+    }
+
+    #coordinateFromKey(key) {
+        const [x, y] = key.split(',');
+        return new Coordinate(x, y);
     }
 }
 
 class Game {
-    #turnsPerSecond = 15
-    #cellMap = new CoordinateMap();
-    #gameTimer = null;
+    #cellMap;
 
-    constructor(options) {
-        if (options.turnsPerSecond) {
-            this.#turnsPerSecond = options.turnsPerSecond;
+    constructor(seed) {
+        const cellMap = new CoordinateMap();
+        for (const c of seed) {
+            cellMap.set(c, true);
         }
+        this.#cellMap = cellMap;
     }
 
-    reset() {
-        this.#cellMap = new CoordinateMap();
-        if (this.isRunning()) {
-            this.stop();
-        }
+    aliveCells() {
+        const aliveCells = [];
+        this.#cellMap.forEach((alive, cell) => {
+            if (alive) {
+                aliveCells.push(cell);
+            }
+        })
+        return aliveCells;
     }
 
-    start() {
-        if (this.#gameTimer) {
-            throw new Error("Game timer already running");
-        }
-
-        this.#gameTimer = setInterval(() => {
-            this.#cellMap = this.#createNextFrame(this.#cellMap);
-        }, 1000 / this.#turnsPerSecond);
-    }
-
-    stop() {
-        clearInterval(this.#gameTimer);
-        this.#gameTimer = null;
-    }
-
-    isRunning() {
-        return !!this.#gameTimer;
-    }
-
-    setTPS(tps) {
-        this.#turnsPerSecond = tps;
-
-        if (this.isRunning()) {
-            this.stop();
-            this.start();
-        }
-    }
-
-    getCellMap() {
-        return this.#cellMap;
-    }
-
-    setCellState(coordinates, value) {
-        this.#cellMap.set(coordinates, value);
-    }
-
-    toggleCellState(coordinates) {
-        const cellState = this.#cellMap.get(coordinates);
-        if (!cellState) {
-            this.#cellMap.set(coordinates, true);
-        } else {
-            this.#cellMap.set(coordinates, false)
-        }
-    }
-
-    #createNextFrame(currentState) {
+    nextTurn() {
+        const currentState = this.#cellMap;
         const nextState = new CoordinateMap(currentState);
         const currentAliveCells = [];
         currentState.forEach((alive, cell) => {
@@ -160,24 +118,154 @@ class Game {
                 nextState.set(cell, true);
             }
         });
-    
-        return nextState;
+
+        this.#cellMap = nextState;
     }
 }
 
-function drawGrid(ctx, options = {
-    cellSize: CELL_SIZE,
-    lineColor: LINE_COLOR,
-}) {
-    const canvasHeight = ctx.canvas.height;
-    const canvasWidth = ctx.canvas.width;
-    ctx.strokeStyle = options.lineColor;
-    for (let y = 0; y <= canvasHeight; y += options.cellSize) {
-        for (let x = 0; x <= canvasWidth; x += options.cellSize) {
-            ctx.strokeRect(x, y, options.cellSize, options.cellSize);
-        }
+class PixelGrid {
+    #stateMap;
+    #lastMouseCanvasOffset;
+
+    constructor(canvas, options) {
+        this.canvas = canvas;
+        this.canvas.width = options.width;
+        this.canvas.height = options.height;
+        this.cellSize = options?.cellSize ?? 15;
+        this.lineColor = options?.lineColor ?? 'gray';
+        this.fillColor = options?.fillColor ?? 'black';
+        this.#stateMap = new CoordinateMap();
+        this.editEnabled = true;
+        this.#lastMouseCanvasOffset = null;
+
+        this.reset();
+
+        this.canvas.addEventListener('mousedown', (e) => {
+            e.preventDefault(); 
+            isClicking = true;
+
+            if (!this.editEnabled) {
+                return;
+            }
+
+            const c = this.#toCoordinate(e.offsetX, e.offsetY);
+            if (this.#stateMap.get(c)) {
+                this.clearCell(c);
+            } else {
+                this.fillCell(c);
+            }
+        })
+
+        this.canvas.addEventListener('mousemove', (e) => {
+            if (isClicking && this.editEnabled) {
+                const points = getLine(this.#lastMouseCanvasOffset, [e.offsetX, e.offsetY], this.cellSize);
+    
+                const cellsToFill = points.map(([x, y]) => this.#toCoordinate(x,y)).filter((c) => !isNaN(c.x) &&  !isNaN(c.y));
+                for (const c of cellsToFill) {
+                    this.fillCell(c);
+                }
+            }
+    
+            this.#lastMouseCanvasOffset = [e.offsetX, e.offsetY]
+        })
+
+        this.canvas.addEventListener('mouseup', (e) => {
+            isClicking = false;
+        });
+
+        this.canvas.addEventListener('touchstart', (e) => {
+            const bcr = e.target.getBoundingClientRect();
+            const tapX = e.touches[0].clientX - bcr.x
+            const tapY = e.touches[0].clientY - bcr.y;
+    
+            lastMouseCanvasOffset = [tapX, tapY];
+        })
+    
+        this.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+    
+            const bcr = e.target.getBoundingClientRect();
+            const tapX = e.touches[0].clientX - bcr.x
+            const tapY = e.touches[0].clientY - bcr.y;
+    
+            if (this.editEnabled) {
+                const points = getLine(lastMouseCanvasOffset, [tapX, tapY], this.cellSize);
+    
+                const cellsToFill = points.map(([x, y]) => this.#toCoordinate(x,y))
+                for (const c of cellsToFill) {
+                    this.fillCell(c);
+                }
+            }
+    
+            lastMouseCanvasOffset = [tapX, tapY];
+        });
+
+        this.canvas.addEventListener('mouseover', (e) => {
+            if (this.editEnabled) {
+                canvas.style.cursor = "move";
+            } else {
+                canvas.style.cursor = "pointer";
+            }
+        });
     }
-    ctx.save();
+
+    setEdit(value) {
+        this.editEnabled = value;
+    }
+
+    reset() {
+        this.#stateMap = new CoordinateMap();
+
+        const ctx = this.canvas.getContext('2d');
+        const canvasHeight = ctx.canvas.height;
+        const canvasWidth = ctx.canvas.width;
+        ctx.strokeStyle = this.lineColor;
+        for (let y = 0; y <= canvasHeight; y += this.cellSize) {
+            for (let x = 0; x <= canvasWidth; x += this.cellSize) {
+                ctx.clearRect(x, y, this.cellSize, this.cellSize);
+                ctx.strokeRect(x, y, this.cellSize, this.cellSize);
+            }
+        }
+        ctx.save();
+    }
+
+    fillCell(coordinate) {
+        const ctx = this.canvas.getContext('2d');
+
+        const canvasX = coordinate.x * this.cellSize;
+        const canvasY = coordinate.y * this.cellSize;
+        ctx.fillStyle = this.fillColor;
+        ctx.fillRect(canvasX, canvasY, this.cellSize, this.cellSize);
+
+        this.#stateMap.set(coordinate, true);
+    }
+
+    clearCell(coordinate) {
+        const ctx = this.canvas.getContext('2d');
+
+        const canvasX = coordinate.x * this.cellSize;
+        const canvasY = coordinate.y * this.cellSize;
+        ctx.clearRect(canvasX, canvasY, this.cellSize, this.cellSize);
+        ctx.strokeRect(canvasX, canvasY, this.cellSize, this.cellSize); 
+
+        this.#stateMap.set(coordinate, false);
+    }
+
+    getSelectedCells() {
+        const selectedCells = [];
+        this.#stateMap.forEach((alive, cell) => {
+            if (alive) {
+                selectedCells.push(cell);
+            }
+        })
+        return selectedCells; 
+    }
+
+    #toCoordinate(x0, y0) {
+        const x = Math.floor(x0 / this.cellSize);
+        const y = Math.floor(y0 / this.cellSize);
+        return new Coordinate(x, y);
+    }
 }
 
 function getLine(c0, c1, step) {
@@ -198,41 +286,6 @@ function getLine(c0, c1, step) {
     return points;
 }
 
-function toCoordinate(x0, y0) {
-    const x = Math.floor(x0 / CELL_SIZE);
-    const y = Math.floor(y0 / CELL_SIZE);
-    return new Coordinate(x, y);
-}
-
-function drawCell(ctx, coordinate) {
-    const canvasX = coordinate.x * CELL_SIZE;
-    const canvasY = coordinate.y * CELL_SIZE;
-    ctx.fillStyle = CELL_COLOR;
-    ctx.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
-}
-
-function clearCell(ctx, coordinate) {
-    const canvasX = coordinate[0] * CELL_SIZE;
-    const canvasY = coordinate[1] * CELL_SIZE;
-    ctx.clearRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
-    ctx.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
-}
-
-function drawState(ctx, cellMap) {
-    cellMap.forEach((alive, cell) => {
-        if (alive) {
-            drawCell(ctx, cell);
-        } else {
-            clearCell(ctx, cell);
-        } 
-    });
-}
-
-function coordinateFromKey(key) {
-    const [x, y] = key.split(',');
-    return new Coordinate(x, y);
-}
-
 function onResize() {
     const canvas = document.getElementById('game');
     const header = document.querySelector('header')
@@ -250,16 +303,6 @@ function onResize() {
     }
 }
 
-function draw(game) {
-    const ctx = document.getElementById('game').getContext('2d');
-    
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    drawGrid(ctx);
-    drawState(ctx, game.getCellMap());
-    
-    window.requestAnimationFrame(() => draw(game));
-}
-
 function init() {
     const rulesBtn = document.getElementById('rules-btn');
     const closeBtn = document.getElementById('close-rules');
@@ -269,12 +312,12 @@ function init() {
     const startStopBtn = document.getElementById('startstop');
     const resetBtn = document.getElementById('reset');
 
-    const game = new Game({
-        turnsPerSecond: 15
+    const grid = new PixelGrid(canvas, {
+        width: 600,
+        height: 555,
     });
 
     window.addEventListener('resize', onResize);
-    onResize();
 
     rulesBtn.addEventListener('click', () => {
         rulesDialog.showModal();
@@ -290,89 +333,49 @@ function init() {
         rulesDialog.close();
     })
 
-    canvas.addEventListener('mousedown', (e) => {
-        isClicking = true;
-        if (!game.isRunning()) {
-            const coordinates = toCoordinate(e.offsetX, e.offsetY);
-            game.toggleCellState(coordinates);
-        }
-    })
-    
-    canvas.addEventListener('mouseup', (e) => {
-        isClicking = false;
-    });
-
-    canvas.addEventListener('mousemove', (e) => {
-        if (isClicking && !game.isRunning()) {
-            const points = getLine(lastMouseCanvasOffset, [e.offsetX, e.offsetY], CELL_SIZE);
-
-            const cellsToFill = points.map(([x, y]) => toCoordinate(x,y)).filter((c) => !isNaN(c.x) &&  !isNaN(c.y));
-            for (const c of cellsToFill) {
-                game.setCellState(c, true);
-            }
-        }
-
-        lastMouseCanvasOffset = [e.offsetX, e.offsetY]
-    })
-
-    canvas.addEventListener('mouseover', (e) => {
-        if (game.isRunning()) {
-            canvas.style.cursor = "move";
-        } else {
-            canvas.style.cursor = "pointer";
-        }
-    });
-
-    canvas.addEventListener('touchstart', (e) => {
-        const bcr = e.target.getBoundingClientRect();
-        const tapX = e.touches[0].clientX - bcr.x
-        const tapY = e.touches[0].clientY - bcr.y;
-
-        lastMouseCanvasOffset = [tapX, tapY];
-    })
-
-    canvas.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-
-        const bcr = e.target.getBoundingClientRect();
-        const tapX = e.touches[0].clientX - bcr.x
-        const tapY = e.touches[0].clientY - bcr.y;
-
-        if (!game.isRunning()) {
-            const points = getLine(lastMouseCanvasOffset, [tapX, tapY], CELL_SIZE);
-
-            const cellsToFill = points.map(([x, y]) => toCoordinate(x,y))
-            for (const c of cellsToFill) {
-                game.setCellState(c, true);
-            }
-        }
-
-        lastMouseCanvasOffset = [tapX, tapY];
-    })
-
     tpsInput.addEventListener('change', (e) => {
-        game.setTPS(e.target.value);
+        framesPerSecond = e.target.value;
+        const game = new Game(grid.getSelectedCells());
+
+        clearInterval(timerId);
+        timerId = setInterval(() => {
+            grid.reset();
+            game.nextTurn();
+            for (const c of game.aliveCells()) {
+                grid.fillCell(c);
+            }
+        }, 1000 / framesPerSecond);
     })
 
     startStopBtn.addEventListener('click', () => {
-        if (game.isRunning()) {
-            game.stop();
+        if (timerId) {
+            grid.setEdit(true);
+            clearInterval(timerId);
+            timerId = null;
             startStopBtn.innerHTML = "Start";
-         } else {
-            game.start();
+        } else {
+            const game = new Game(grid.getSelectedCells());
+            grid.setEdit(false);
+            timerId = setInterval(() => {
+                grid.reset();
+                game.nextTurn();
+                for (const c of game.aliveCells()) {
+                    grid.fillCell(c);
+                }
+            }, 1000 / framesPerSecond);
             startStopBtn.innerHTML = "Stop";
         }
     })
 
     resetBtn.addEventListener('click', () => {
-        game.reset();
-        if (game.isRunning()) {
-            game.stop();
+        grid.reset();
+        grid.editEnabled(true);
+        if (timerId) {
+            clearInterval(timerId);
+            timerId = null;
             startStopBtn.innerHTML = "Start";
         }
-    })
-
-    window.requestAnimationFrame(() => draw(game));
+    });
 }
 
 init();
