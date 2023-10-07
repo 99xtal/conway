@@ -58,31 +58,12 @@ class CoordinateMap {
     }
 }
 
-class EventEmitter{
-    constructor(){
-        this.callbacks = {}
-    }
-
-    on(event, cb){
-        if(!this.callbacks[event]) this.callbacks[event] = [];
-        this.callbacks[event].push(cb)
-    }
-
-    emit(event, data){
-        let cbs = this.callbacks[event]
-        if(cbs){
-            cbs.forEach(cb => cb(data))
-        }
-    }
-}
-
-class Game extends EventEmitter {
+class Game {
     #turnsPerSecond = 15
     #cellMap = new CoordinateMap();
     #gameTimer = null;
 
     constructor(options) {
-        super();
         if (options.turnsPerSecond) {
             this.#turnsPerSecond = options.turnsPerSecond;
         }
@@ -92,7 +73,6 @@ class Game extends EventEmitter {
         this.#cellMap = new CoordinateMap();
         if (this.isRunning()) {
             this.stop();
-            this.emit('stop');
         }
     }
 
@@ -104,13 +84,11 @@ class Game extends EventEmitter {
         this.#gameTimer = setInterval(() => {
             this.#cellMap = this.#createNextFrame(this.#cellMap);
         }, 1000 / this.#turnsPerSecond);
-        this.emit('start');
     }
 
     stop() {
         clearInterval(this.#gameTimer);
         this.#gameTimer = null;
-        this.emit('stop');
     }
 
     isRunning() {
@@ -295,14 +273,6 @@ function init() {
         turnsPerSecond: 15
     });
 
-    game.on('start', () => {
-        startStopBtn.innerHTML = "Stop";
-    })
-
-    game.on('stop', () => {
-        startStopBtn.innerHTML = "Start"; 
-    })
-
     window.addEventListener('resize', onResize);
     onResize();
 
@@ -387,13 +357,19 @@ function init() {
     startStopBtn.addEventListener('click', () => {
         if (game.isRunning()) {
             game.stop();
+            startStopBtn.innerHTML = "Start";
          } else {
-            game.start()
+            game.start();
+            startStopBtn.innerHTML = "Stop";
         }
     })
 
     resetBtn.addEventListener('click', () => {
         game.reset();
+        if (game.isRunning()) {
+            game.stop();
+            startStopBtn.innerHTML = "Start";
+        }
     })
 
     window.requestAnimationFrame(() => draw(game));
