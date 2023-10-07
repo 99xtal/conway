@@ -376,7 +376,7 @@ function init() {
 
     resetBtn.addEventListener('click', () => {
         grid.reset();
-        grid.editEnabled(true);
+        grid.setEdit(true);
         if (timerId) {
             clearInterval(timerId);
             timerId = null;
